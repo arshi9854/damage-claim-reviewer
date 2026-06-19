@@ -4,6 +4,10 @@ Automated damage claim verification system built for the **HackerRank Orchestrat
 
 Handles three object types: **cars**, **laptops**, and **packages**.
 
+### [> Watch the Live Demo](https://arshi9854.github.io/damage-claim-reviewer/demo.html)
+
+See how the system processes a **legitimate claim** (approved) and catches a **fraudulent claim** (stock photo + prompt injection attempt) — all animated, no install needed.
+
 ## How It Works
 
 For each claim, the system:
