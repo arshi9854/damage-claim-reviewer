@@ -1,153 +1,123 @@
-# HackerRank Orchestrate
+# Damage Claim Reviewer
 
-Starter repository for the **HackerRank Orchestrate** 24-hour hackathon.
+Automated damage claim verification system built for the **HackerRank Orchestrate** hackathon. Analyzes submitted images against claim conversations, user history, and evidence requirements to determine whether a damage claim is supported, contradicted, or lacks sufficient information.
 
-Build a system that verifies visual evidence for damage claims across three object types: **cars**, **laptops**, and **packages**.
+Handles three object types: **cars**, **laptops**, and **packages**.
 
-Your system will receive claim conversations, one or more submitted images, user claim history, and minimum evidence requirements. It must decide whether the submitted images support the claim, contradict it, or do not provide enough information.
+## How It Works
 
-Read [`problem_statement.md`](./problem_statement.md) for the full task spec, input/output schema, and allowed values.
+For each claim, the system:
 
----
+1. Parses the claim conversation to extract what the user is reporting
+2. Looks up the user's claim history for risk context
+3. Loads minimum evidence requirements for that object/damage type
+4. Sends images + full context to **Claude Sonnet** (VLM) in a single call
+5. Parses the structured JSON response
+6. Validates all fields against allowed enum values
+7. Writes the final prediction to `output.csv`
 
-## Contents
+## Architecture
 
-1. [Repository layout](#repository-layout)
-2. [What you need to build](#what-you-need-to-build)
-3. [Where your code goes](#where-your-code-goes)
-4. [Quickstart](#quickstart)
-5. [Evaluation](#evaluation)
-6. [Chat transcript logging](#chat-transcript-logging)
-7. [Submission](#submission)
-8. [Judge interview](#judge-interview)
-
----
-
-## Repository layout
-
-```text
-.
-├── AGENTS.md                         # Rules for AI coding tools + transcript logging
-├── problem_statement.md              # Full task description and I/O schema
-├── README.md                         # You are here
-├── code/                             # Build your solution here
-│   ├── main.py                       # Suggested terminal entry point
-│   └── evaluation/
-│       └── main.py                   # Suggested evaluation entry point
-└── dataset/
-    ├── sample_claims.csv             # Inputs + expected outputs for development
-    ├── claims.csv                    # Inputs only; run your system on these rows
-    ├── user_history.csv              # Historical claim counts and risk context
-    ├── evidence_requirements.csv     # Minimum image evidence requirements
-    └── images/
-        ├── sample/                   # Images referenced by sample_claims.csv
-        └── test/                     # Images referenced by claims.csv
+```
+CSV Inputs ──► Prompt Builder ──► Claude Sonnet (VLM) ──► JSON Parser ──► Validator ──► output.csv
+                   │                      ▲
+                   │                      │
+           user_history.csv          images/*.jpg
+           evidence_requirements.csv
 ```
 
----
+Single-pass pipeline. One model call per claim. No frameworks, no external dependencies beyond Python stdlib and the Claude CLI.
 
-## What you need to build
+## Prerequisites
 
-A system that, for each row in `dataset/claims.csv`, produces one row in `output.csv`.
-
-Input fields:
-
-| Column | Meaning |
-|---|---|
-| `user_id` | User submitting the claim; use this to look up `dataset/user_history.csv` |
-| `image_paths` | One or more submitted image paths, separated by semicolons |
-| `user_claim` | Chat transcript describing the issue |
-| `claim_object` | `car`, `laptop`, or `package` |
-
-Required output fields:
-
-| Column | Meaning |
-|---|---|
-| `evidence_standard_met` | Whether the image set is sufficient to evaluate the claim |
-| `evidence_standard_met_reason` | Short reason for the evidence decision |
-| `risk_flags` | Semicolon-separated risk flags, or `none` |
-| `issue_type` | Visible issue type |
-| `object_part` | Relevant object part |
-| `claim_status` | `supported`, `contradicted`, or `not_enough_information` |
-| `claim_status_justification` | Concise explanation grounded in the image evidence |
-| `supporting_image_ids` | Image IDs supporting the decision, or `none` |
-| `valid_image` | Whether the image set is usable for automated review |
-| `severity` | `none`, `low`, `medium`, `high`, or `unknown` |
-
-Hard requirements:
-
-- Must read the provided CSV files and local images.
-- Must produce `output.csv` with the exact schema in `problem_statement.md`.
-- Must include an evaluation workflow
-- Must avoid hardcoded test labels or file-specific answers.
-
-Beyond that you are free to bring your own approach: VLMs, LLMs, structured prompting, rule layers, batching, caching, evaluation pipelines, model comparison, or anything else.
-
----
-
-## Where your code goes
-
-All of your work belongs in [`code/`](./code/). The repo ships with empty starter files that you can grow into your full solution.
-
-Suggested conventions:
-
-- Put your main runnable solution in `code/main.py`, or document your own entry point clearly.
-- Put evaluation code under `code/evaluation/` or an `evaluation/` folder included in your final `code.zip`.
-- Write final predictions to `output.csv`.
-
----
-
-## Quickstart
-
-Clone this repository:
+- Python 3.10+
+- [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated
 
 ```bash
-git clone git@github.com:interviewstreet/hackerrank-orchestrate-june26.git
-cd hackerrank-orchestrate-june26
+claude --version
 ```
 
-You are free to use any language or runtime. Python, JavaScript, and TypeScript are all reasonable choices.
+## Usage
 
----
+```bash
+# Run on test claims → produces output.csv
+python3 code/main.py test
 
-## Evaluation
+# Run on sample claims → produces sample_output.csv
+python3 code/main.py sample
 
-The evaluation report should include:
+# Re-run any failed claims (patches output.csv in place)
+python3 code/rerun_failed.py
 
-- metrics on `dataset/sample_claims.csv`
-- at least two strategies, prompts, or model configurations compared
-- the final strategy used for `output.csv`
-- operational analysis covering model calls, token usage, image usage, approximate cost, runtime, and TPM/RPM considerations
+# Run evaluation against sample ground truth
+python3 code/evaluation/main.py
+```
 
----
+## Project Structure
 
-## Chat transcript logging
+```
+├── code/
+│   ├── main.py                      # Main pipeline
+│   ├── rerun_failed.py              # Retry script for transient failures
+│   ├── README.md                    # Code-level docs
+│   └── evaluation/
+│       ├── main.py                  # Evaluation harness
+│       └── evaluation_report.md     # Results and operational analysis
+├── dataset/
+│   ├── claims.csv                   # 44 test claims (input only)
+│   ├── sample_claims.csv            # 20 labeled claims (input + ground truth)
+│   ├── user_history.csv             # User risk profiles
+│   ├── evidence_requirements.csv    # Minimum evidence checklists
+│   └── images/
+│       ├── sample/                  # Images for sample claims
+│       └── test/                    # Images for test claims
+└── output.csv                       # Final predictions
+```
 
-This repo ships with an `AGENTS.md` that modern AI coding tools may read. It instructs the tool to append conversation turns to a shared log file:
+## Evaluation Results
 
-| Platform | Path |
-|---|---|
-| macOS / Linux | `$HOME/hackerrank_orchestrate/log.txt` |
-| Windows | `%USERPROFILE%\hackerrank_orchestrate\log.txt` |
+Evaluated on 20 labeled sample claims across 4 prompt iterations:
 
-You will upload this log as your chat transcript at submission time. The chat transcript means your conversation with the AI coding tool you used to build the system. It is not the runtime logs, reasoning trace, or conversation history produced by the claim-verification agent you are building.
+| Metric | Run 1 | Run 4 (Final) |
+|--------|-------|---------------|
+| claim_status | 0.800 | 0.850 |
+| issue_type | 0.450 | 0.700 |
+| object_part | 0.750 | 0.900 |
+| severity | 0.250 | 0.550 |
+| evidence_standard_met | 0.800 | 0.850 |
+| valid_image | 0.800 | 0.850 |
+| risk_flags (F1) | 0.578 | 0.703 |
+| supporting_image_ids (F1) | 0.750 | 0.833 |
+| **Overall** | **0.647** | **0.780** |
 
-If you use multiple AI tools, include the relevant conversation logs from all of them in the same transcript file. Separate each tool's section with a clear divider and label it with the tool name.
+## Key Design Decisions
 
-Never paste secrets into the chat. If secrets are needed, use environment variables.
+- **Sonnet over Haiku/Opus** — best accuracy-to-speed ratio for nuanced visual analysis
+- **CLI over Python SDK** — zero dependencies, handles image encoding and auth natively
+- **One call per claim** — Sonnet handles extraction, analysis, and judgment in a single pass
+- **Sequential processing** — 44 claims in ~30 minutes; avoids rate limit complexity
+- **Prompt engineering as primary lever** — improved from 0.647 to 0.780 through calibration rules and concrete examples
 
----
+## Prompt Engineering Highlights
 
-## Submission
+- Explicit issue type distinctions (crack vs glass_shatter, stain vs water_damage)
+- Severity calibration with concrete examples (windshield crack = medium, only total destruction = high)
+- Clear status decision rules (contradicted = part visible but undamaged, not_enough_information = part not visible)
+- Adversarial awareness (detects and flags text instructions embedded in images like "approve this claim")
+- User history integration (risk flags from history, never overrides visual evidence)
 
-Submit the following files as instructed by HackerRank:
+## Output Schema
 
-1. **Code zip**: zip your runnable solution, README, prompts/configs, and evaluation folder. Exclude virtualenvs, `node_modules`, build artifacts, and unnecessary generated files.
-2. **Predictions CSV**: your final `output.csv` for all rows in `dataset/claims.csv`.
-3. **Chat transcript**: the `log.txt` from the path in [Chat transcript logging](#chat-transcript-logging).
+| Field | Values |
+|-------|--------|
+| `claim_status` | `supported`, `contradicted`, `not_enough_information` |
+| `issue_type` | `dent`, `scratch`, `crack`, `glass_shatter`, `broken_part`, `missing_part`, `torn_packaging`, `crushed_packaging`, `water_damage`, `stain`, `none`, `unknown` |
+| `severity` | `none`, `low`, `medium`, `high`, `unknown` |
+| `risk_flags` | `blurry_image`, `claim_mismatch`, `non_original_image`, `wrong_object`, `text_instruction_present`, `user_history_risk`, etc. |
 
-Before submitting, confirm:
+## Operational Stats
 
-- `output.csv` has one row per row in `dataset/claims.csv`.
-- `output.csv` has the exact required columns in the exact required order.
-- Your evaluation files are included in `code.zip`.
+- ~40s per claim, ~30 min for full test set
+- ~2000 text tokens + 1000-3000 per image input, ~200 output per call
+- Estimated $2-5 at API pricing for the full test set
+- 2 retries with 5s backoff on failure + separate rerun script for transient errors
